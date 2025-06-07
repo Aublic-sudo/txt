@@ -9,19 +9,21 @@ async def start_handler(bot, message: Message):
         photo="https://i.ibb.co/cSyLcHNz/Chat-GPT-Image-Jun-3-2025-03-16-31-PM.png",
         caption=(
             f"**Hello {user}** 👋\n"
-            "I'm a Powerful TXT Extractor Bot.\n"
+            "I'm a TXT Extractor Bot 😜.\n"
             "__Note: App with Star Indicator Not For Public.__\n\n"
             "**Managed By : @Aublic**\n\n"
             "**Usage:** First Select the App Listed Below."
         ),
         reply_markup=InlineKeyboardMarkup([
             [
+                InlineKeyboardButton("👑𝖮𝖶𝖭𝖤𝖱", url="https://t.me/Aublic")
+            ],
+            
+            [
                 InlineKeyboardButton("🔑 Master Appx", callback_data="master_appx"),
                 InlineKeyboardButton("🔍 Find API", callback_data="find_appx")
-            ],
-            [
-                InlineKeyboardButton("📲 Appx OTP Login", callback_data="otp_login")
             ]
+            
         ])
     )
 
