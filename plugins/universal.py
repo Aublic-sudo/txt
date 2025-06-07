@@ -51,13 +51,29 @@ async def universal_login(bot, m: Message, host: str, user: str = None, passwd: 
         "Authorization": token
     }
 
+    # 👤 If only token provided, extract user ID from token
+    if not userid and token:
+        try:
+            payload = token.split('.')[1]
+            padded = payload + '=' * (-len(payload) % 4)
+            decoded = json.loads(b64decode(padded).decode())
+            userid = str(decoded.get("id"))
+            headers["User-Id"] = userid
+        except Exception as e:
+            return await m.reply_text(f"❌ Token decode failed: {e}")
+
     # 🎓 Fetch course
     try:
         res1 = s.get(f"https://{host}/get/mycourse?userid={userid}", headers=headers)
-        b_data = res1.json()["data"]
+        b_data = res1.json().get("data", [])
+        if not b_data:
+            return await m.reply_text("❌ No batches found.")
+
         txt = ""
         for data in b_data:
-            txt += f"```{data['id']}``` - **{data['course_name']}**\n\n"
+            cname = data.get("course_name") or data.get("courseName") or "NoName"
+            cid = data.get("id") or data.get("courseId")
+            txt += f"```{cid}``` - **{cname}**\n\n"
         await m.reply_text(f"**You have these batches:**\n\n{txt}")
     except Exception as e:
         return await m.reply_text(f"❌ Failed to fetch courses: {e}")
