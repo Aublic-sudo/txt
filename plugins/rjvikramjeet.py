@@ -51,45 +51,65 @@ from base64 import b64encode, b64decode
 
 @bot.on_message(filters.command(["rgvikramjeet"]))
 async def account_login(bot: Client, m: Message):
-    s = requests.Session()
-    global cancel
-    cancel = False
+    host = "rgvikramjeetapi.classx.co.in"
     editable = await m.reply_text(
-        "Send **ID & Password** in this manner otherwise bot will not respond.\n\nSend like this:-  **ID*Password**")
-    rwa_url = "https://rgvikramjeetapi.classx.co.in/post/userLogin"
-    hdr = {"Auth-Key": "appxapi",
-           "User-Id": "-2",
-           "Authorization": "",
-           "User_app_category": "",
-           "Language": "en",
-           "Content-Type": "application/x-www-form-urlencoded",
-           "Content-Length": "233",
-           "Accept-Encoding": "gzip, deflate",
-           "User-Agent": "okhttp/4.9.1"
-          }
-    info = {"email": "", "password": ""}
-    #7355971781*73559717
-    input1: Message = await bot.listen(editable.chat.id)
-    raw_text = input1.text
-    info["email"] = raw_text.split("*")[0]
-    info["password"] = raw_text.split("*")[1]
-    await input1.delete(True)
+        "Send your login in format:\n\n"
+        "`userid*token`  for direct login\n"
+        "or\n"
+        "`email*password` for login via API"
+    )
+    input1: Message = await bot.listen(m.chat.id)
+    raw_text = input1.text.strip()
+    await input1.delete()
+
+    s = requests.Session()
     scraper = cloudscraper.create_scraper()
-    res = scraper.post(rwa_url, data=info, headers=hdr).content
-    output = json.loads(res)
-    #print(output)
-    userid = output["data"]["userid"]
-    token = output["data"]["token"]
+
+    if len(raw_text.split("*")) != 2:
+        return await editable.edit("❌ Invalid format. Use `id*pass` or `userid*token`")
+
+    part1, part2 = raw_text.split("*")
+    is_token_login = part2.startswith("eyJ")  # JWT starts with eyJ...
+
+    if is_token_login:
+        userid, token = part1, part2
+        await editable.edit("✅ **Token Login Successful!**")
+    else:
+        login_url = f"https://{host}/post/userLogin"
+        headers = {
+            "Auth-Key": "appxapi",
+            "User-Id": "-2",
+            "Authorization": "",
+            "User_app_category": "",
+            "Language": "en",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept-Encoding": "gzip, deflate",
+            "User-Agent": "okhttp/4.9.1"
+        }
+        info = {"email": part1, "password": part2}
+        try:
+            res = scraper.post(login_url, data=info, headers=headers).content
+            output = json.loads(res)
+            userid = output["data"]["userid"]
+            token = output["data"]["token"]
+            await editable.edit("✅ **Login Successful!**")
+        except Exception as e:
+            return await editable.edit(f"❌ Login failed: {e}")
+
+    # ✅ common headers now
     hdr1 = {
-        "Host": "rgvikramjeetapi.classx.co.in",
+        "Host": host,
         "Client-Service": "Appx",
         "Auth-Key": "appxapi",
         "User-Id": userid,
         "Authorization": token
-        }
+    }
+
+    # ✅ From here, proceed to mycourse → subject → topics → videos flow...
+    # 🔁 Keep your old code here (you already wrote the batch fetching and decryption logic)
     #print(userid)
     #print(token)
-    await editable.edit("**login Successful**")
+    #await editable.edit("**login Successful**")
     # await editable.edit(f"You have these Batches :-\n{raw_text}"
     cour_url = "https://rgvikramjeetapi.classx.co.in/get/mycourse?userid="
 
