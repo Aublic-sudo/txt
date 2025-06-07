@@ -8,11 +8,11 @@ from base64 import b64decode
 import os
 
 async def universal_login(bot, m: Message, host: str, user: str = None, passwd: str = None, token: str = None):
-    host = host.replace("https://", "").replace("http://", "").strip("/")  # ✅ Fix for double https
+    host = host.replace("https://", "").replace("http://", "").strip("/")
     s = requests.Session()
     scraper = cloudscraper.create_scraper()
-    
-    # If token and user id are provided, skip login API call
+
+    # 🔒 Login or Token
     if token and user:
         userid = user
         await m.reply_text("✅ **Token Login Successful!**")
@@ -32,6 +32,12 @@ async def universal_login(bot, m: Message, host: str, user: str = None, passwd: 
         try:
             res = scraper.post(login_url, data=info, headers=hdr).content
             output = json.loads(res)
+
+            if not output.get("status") or "data" not in output or "userid" not in output["data"]:
+                msg = output.get("message", "Unknown login error")
+                await m.reply_text(f"❌ Login failed: {msg}")
+                return
+
             userid = output["data"]["userid"]
             token = output["data"]["token"]
             await m.reply_text("✅ **Login Successful!**")
@@ -47,18 +53,18 @@ async def universal_login(bot, m: Message, host: str, user: str = None, passwd: 
         "Authorization": token
     }
 
+    # 📦 Fetch Courses
     try:
-        cour_url = f"https://{host}/get/mycourse?userid={userid}"
-        res1 = s.get(cour_url, headers=hdr1)
+        res1 = s.get(f"https://{host}/get/mycourse?userid={userid}", headers=hdr1)
         b_data = res1.json()['data']
         cool = ""
         FFF = "**BATCH-ID - BATCH NAME - INSTRUCTOR**"
         for data in b_data:
-            aa = f" ```{data['id']}```      - **{data['course_name']}**\n\n"
+            aa = f" ```{data['id']}``` - **{data['course_name']}**\n\n"
             if len(f'{cool}{aa}') > 4096:
                 cool = ""
             cool += aa
-        await m.reply_text(f'{"**You have these batches :-**"}\n\n{FFF}\n\n{cool}')
+        await m.reply_text(f'**You have these batches :-**\n\n{FFF}\n\n{cool}')
     except Exception as e:
         await m.reply_text(f"❌ Failed to fetch batches: {str(e)}")
         return
@@ -68,6 +74,7 @@ async def universal_login(bot, m: Message, host: str, user: str = None, passwd: 
     batch_id = input2.text.strip()
     await input2.delete(True)
 
+    # 📚 Fetch Subjects
     try:
         subj_url = f"https://{host}/get/allsubjectfrmlivecourseclass?courseid={batch_id}"
         html = scraper.get(subj_url, headers=hdr1).content
@@ -83,6 +90,7 @@ async def universal_login(bot, m: Message, host: str, user: str = None, passwd: 
     subject_id = input3.text.strip()
     await input3.delete(True)
 
+    # 📂 Fetch Topics
     try:
         topic_url = f"https://{host}/get/alltopicfrmlivecourseclass?courseid={batch_id}&subjectid={subject_id}"
         res3 = s.get(topic_url, headers=hdr1)
@@ -100,7 +108,7 @@ async def universal_login(bot, m: Message, host: str, user: str = None, passwd: 
             t_name = data["topic_name"]
             tid = data["topicid"]
             zz = len(tid)
-            hh = f"```{tid}```     - **{t_name} - ({zz})**\n"
+            hh = f"```{tid}``` - **{t_name} - ({zz})**\n"
             if len(f'{cool1}{hh}') > 4096:
                 cool1 = ""
             cool1 += hh
@@ -121,6 +129,7 @@ async def universal_login(bot, m: Message, host: str, user: str = None, passwd: 
 
     outtxt = f"AUBLIC_{batch_id}_links.txt"
 
+    # 🎬 Fetch and Decrypt Videos
     try:
         xv = topic_ids.split('&')
         for t in xv:
@@ -144,7 +153,7 @@ async def universal_login(bot, m: Message, host: str, user: str = None, passwd: 
                 with open(outtxt, 'a', encoding='utf-8') as f:
                     f.write(f"{tid}:{b}\n")
         await m.reply_document(outtxt)
-        os.remove(outtxt)  # Cleanup
+        os.remove(outtxt)
     except Exception as e:
         await m.reply_text(f"❌ Error: {str(e)}")
 
