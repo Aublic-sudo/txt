@@ -1,167 +1,149 @@
-import os
-import cloudscraper
+import requests
+import json
 from pyrogram.types import Message
-from pyrogram import Client
-from plugins.decoder import decode
-import aiofiles
+import cloudscraper
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import unpad
+from base64 import b64decode
 
-async def account_login(bot: Client, m: Message, host: str):
-    import asyncio
+async def universal_login(bot, m: Message, host: str, user: str = None, passwd: str = None, token: str = None):
+    s = requests.Session()
     scraper = cloudscraper.create_scraper()
-    editable = await m.reply_text("**Send ID*Password**\nOR\n**Token*UserID**")
+    
+    # If token and user id are provided, skip login API call
+    if token and user:
+        userid = user
+        await m.reply_text("✅ **Token Login Successful!**")
+    else:
+        # Old flow: login with id/pass
+        login_url = f"https://{host}/post/userLogin"
+        hdr = {
+            "Auth-Key": "appxapi",
+            "User-Id": "-2",
+            "Authorization": "",
+            "User_app_category": "",
+            "Language": "en",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept-Encoding": "gzip, deflate",
+            "User-Agent": "okhttp/4.9.1"
+        }
+        info = {"email": user, "password": passwd}
+        try:
+            res = scraper.post(login_url, data=info, headers=hdr).content
+            output = json.loads(res)
+            userid = output["data"]["userid"]
+            token = output["data"]["token"]
+            await m.reply_text("✅ **Login Successful!**")
+        except Exception as e:
+            await m.reply_text(f"❌ Login failed: {str(e)}")
+            return
 
-    try:
-        input1: Message = await bot.listen(m.chat.id)
-        raw_text = input1.text.strip()
-        await input1.delete()
-    except Exception:
-        return await editable.edit("❌ Failed to read input.")
-
-    if len(raw_text.split("*")) != 2:
-        return await editable.edit("❌ Invalid format. Use: `ID*Password` or `Token*UserID`")
-
-    part1, part2 = raw_text.split("*")
-    login_mode = "idpass" if "@" in part1 or part1.isdigit() else "token"
-
-    token, userid = None, None
-    try:
-        if login_mode == "idpass":
-            res = scraper.post(
-                f"{host}/post/userLogin",
-                data={"email": part1, "password": part2},
-                headers={
-                    "Auth-Key": "appxapi",
-                    "User-Id": "-2",
-                    "Authorization": "",
-                    "User_app_category": "",
-                    "Language": "en",
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "User-Agent": "okhttp/4.9.1"
-                }
-            ).json()
-            token = res.get("data", {}).get("token")
-            userid = res.get("data", {}).get("userid")
-            if not token or not userid:
-                return await editable.edit("❌ Login failed! Check credentials.")
-            await editable.edit("✅ Login successful via ID & Password.")
-        else:
-            token, userid = part1, part2
-            await editable.edit("✅ Login successful via Token.")
-    except Exception as e:
-        return await editable.edit(f"❌ Login request failed!\n{e}")
-
-    headers = {
-        "Host": host.replace("https://", "").replace("http://", ""),
+    hdr1 = {
+        "Host": host,
         "Client-Service": "Appx",
         "Auth-Key": "appxapi",
-        "User-Id": str(userid),
-        "Authorization": str(token)
+        "User-Id": userid,
+        "Authorization": token
     }
 
-    # Get courses
+    # Rest of the code same as before
     try:
-        course_list = scraper.get(f"{host}/get/mycourse?userid={userid}", headers=headers).json()
-        courses = course_list.get("data", [])
-        if not courses:
-            return await editable.edit("❌ No courses found!")
+        cour_url = f"https://{host}/get/mycourse?userid={userid}"
+        res1 = s.get(cour_url, headers=hdr1)
+        b_data = res1.json()['data']
+        cool = ""
+        FFF = "**BATCH-ID - BATCH NAME - INSTRUCTOR**"
+        for data in b_data:
+            aa = f" ```{data['id']}```      - **{data['course_name']}**\n\n"
+            if len(f'{cool}{aa}') > 4096:
+                cool = ""
+            cool += aa
+        await m.reply_text(f'{"**You have these batches :-**"}\n\n{FFF}\n\n{cool}')
     except Exception as e:
-        return await editable.edit(f"❌ Failed to fetch courses.\n{e}")
+        await m.reply_text(f"❌ Failed to fetch batches: {str(e)}")
+        return
 
-    course_text = ""
-    for course in courses:
-        course_text += f"```{course['id']}``` - **{course['course_name']}**\n\n"
-    await editable.edit(f"**Available Batches:**\n\n{course_text}")
-
-    # Select course ID
-    try:
-        msg1 = await m.reply_text("📥 Now send the **Batch ID**:")
-        input2 = await bot.listen(m.chat.id)
-        batch_id = input2.text.strip()
-        await msg1.delete()
-        await input2.delete()
-    except Exception:
-        return await m.reply_text("❌ Failed to read batch ID.")
+    await m.reply_text("**Now send the Batch ID to Download**")
+    input2: Message = await bot.listen(m.chat.id)
+    batch_id = input2.text
+    await input2.delete(True)
 
     try:
-        course_info = scraper.get(f"{host}/get/course_by_id?id={batch_id}", headers=headers).json()
-        course_title = course_info["data"][0]["course_name"]
-    except Exception:
-        return await m.reply_text("❌ Invalid Batch ID or fetch error.")
-
-    # Subject fetch
-    try:
-        subs = scraper.get(f"{host}/get/allsubjectfrmlivecourseclass?courseid={batch_id}", headers=headers).json().get("data", [])
-        if not subs:
-            return await m.reply_text("❌ No subjects found for this batch.")
-    except Exception:
-        return await m.reply_text("❌ Failed to fetch subjects.")
-
-    subj_text, subj_ids = "", ""
-    for sub in subs:
-        subj_text += f"```{sub['subjectid']}``` - **{sub['subject_name']}**\n\n"
-        subj_ids += f"{sub['subjectid']}&"
-    await m.reply_text(subj_text)
-
-    # Topic selection
-    try:
-        msg2 = await m.reply_text(f"Send **Topic IDs** like: `1&2&3`\n\nTo download all: ```{subj_ids}```")
-        input3 = await bot.listen(m.chat.id)
-        topic_ids = [x.strip() for x in input3.text.strip().split("&") if x.strip()]
-        await msg2.delete()
-        await input3.delete()
-    except Exception:
-        return await m.reply_text("❌ Failed to read topic IDs.")
-
-    prog = await m.reply_text("🔄 Extracting... Please wait.")
-    video_links = ""
-    try:
-        for sub_id in topic_ids:
-            topics = scraper.get(f"{host}/get/alltopicfrmlivecourseclass?courseid={batch_id}&subjectid={sub_id}", headers=headers).json().get("data", [])
-            for topic in topics:
-                tid = topic["topicid"]
-                cname = topic["topic_name"]
-                concepts = scraper.get(
-                    f"{host}/get/allconceptfrmlivecourseclass",
-                    params={
-                        'courseid': batch_id,
-                        'subjectid': sub_id,
-                        'topicid': tid,
-                        'start': '-1'
-                    },
-                    headers=headers
-                ).json().get("data", [])
-                for concept in concepts:
-                    cid = concept["conceptid"]
-                    videos = scraper.get(
-                        f"{host}/get/livecourseclassbycoursesubtopconceptapiv3",
-                        params={
-                            'courseid': batch_id,
-                            'subjectid': sub_id,
-                            'topicid': tid,
-                            'conceptid': cid,
-                            'start': '-1'
-                        },
-                        headers=headers
-                    ).json().get("data", [])
-                    for v in videos:
-                        title = v.get("Title", "Untitled")
-                        url = decode(v.get("download_link", ""))
-                        video_links += f"{title}: {url}\n"
+        subj_url = f"https://{host}/get/allsubjectfrmlivecourseclass?courseid={batch_id}"
+        html = scraper.get(subj_url, headers=hdr1).content
+        output0 = json.loads(html)
+        subjID = output0["data"]
+        await m.reply_text(str(subjID))
     except Exception as e:
-        await prog.delete()
-        return await m.reply_text(f"❌ Extraction error: {e}")
+        await m.reply_text(f"❌ Failed to fetch subjects: {str(e)}")
+        return
 
-    filename = f"AUBLIC - {course_title}.txt"
+    await m.reply_text("**Enter the Subject Id Show in above Response**")
+    input3: Message = await bot.listen(m.chat.id)
+    subject_id = input3.text
+    await input3.delete(True)
+
     try:
-        async with aiofiles.open(filename, "w", encoding="utf-8") as f:
-            await f.write(video_links)
-        await prog.delete()
-        await m.reply_document(filename, caption=f"`{filename}`")
+        topic_url = f"https://{host}/get/alltopicfrmlivecourseclass?courseid={batch_id}&subjectid={subject_id}"
+        res3 = s.get(topic_url, headers=hdr1)
+        b_data2 = res3.json()['data']
+        vj = ""
+        for data in b_data2:
+            tids = (data["topicid"])
+            idid = f"{tids}&"
+            if len(f"{vj}{idid}") > 4096:
+                vj = ""
+            vj += idid
+        cool1 = ""
+        BBB = '**TOPIC-ID    - TOPIC     - VIDEOS**'
+        for data in b_data2:
+            t_name = (data["topic_name"])
+            tid = (data["topicid"])
+            zz = len(tid)
+            hh = f"```{tid}```     - **{t_name} - ({zz})**\n"
+            if len(f'{cool1}{hh}') > 4096:
+                cool1 = ""
+            cool1 += hh
+        await m.reply_text(f'Batch details of **{t_name}** are:\n\n{BBB}\n\n{cool1}')
     except Exception as e:
-        await prog.delete()
-        return await m.reply_text(f"❌ Failed to send file: {e}")
-    finally:
-        try:
-            os.remove(filename)
-        except Exception:
-            pass
+        await m.reply_text(f"❌ Failed to fetch topics: {str(e)}")
+        return
+
+    editable = await m.reply_text(f"Now send the **Topic IDs** to Download\n\nSend like this **1&2&3&4** or copy/edit **below ids** for full batch:\n\n```{vj}```")
+    input4: Message = await bot.listen(m.chat.id)
+    topic_ids = input4.text
+    await input4.delete(True)
+
+    await m.reply_text("**Now send the Resolution**")
+    input5: Message = await bot.listen(m.chat.id)
+    resolution = input5.text
+    await input5.delete(True)
+
+    try:
+        xv = topic_ids.split('&')
+        mm = f"{host.replace('.', '_')}_batch"
+        outtxt = f'{mm}.txt'
+        for t in xv:
+            if not t.strip():
+                continue
+            url = f"https://{host}/get/livecourseclassbycoursesubtopconceptapiv3?topicid={t}&start=-1&conceptid=1&courseid={batch_id}&subjectid={subject_id}"
+            res4 = s.get(url, headers=hdr1).json()
+            topicid = res4["data"]
+            for data in topicid:
+                b64 = data.get("download_link") or data.get("pdf_link")
+                tid = data["Title"]
+                key = "638udh3829162018".encode("utf8")
+                iv = "fedcba9876543210".encode("utf8")
+                ciphertext = bytearray.fromhex(b64decode(b64.encode()).hex())
+                cipher = AES.new(key, AES.MODE_CBC, iv)
+                try:
+                    plaintext = unpad(cipher.decrypt(ciphertext), AES.block_size)
+                    b = plaintext.decode('utf-8')
+                except Exception as e:
+                    b = f"Failed to decrypt: {e}"
+                with open(outtxt, 'a', encoding='utf-8') as f:
+                    f.write(f"{tid}:{b}\n")
+        await m.reply_document(outtxt)
+    except Exception as e:
+        await m.reply_text(f"❌ Error: {str(e)}")
+    await m.reply_text("Done ✅")
