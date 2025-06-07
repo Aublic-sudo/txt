@@ -8,12 +8,11 @@ async def start_handler(bot, message: Message):
     await message.reply_photo(
         photo="https://i.ibb.co/cSyLcHNz/Chat-GPT-Image-Jun-3-2025-03-16-31-PM.png",
         caption=(
-            f"**Hello {user}** 👋\n"
-            "I'm a TXT Extractor Bot 😜.\n"
-            "__Note: App with Star Indicator Not For Public.__\n\n"
-            "**Managed By : @Aublic**\n\n"
-            "**Usage:** First Select the App Listed Below."
-        ),
+    f"**Hello {user}** 👋\n"
+    "I'm a TXT Extractor Bot 😜.\n"
+    "Use /help to see other available commands.\n\n"
+    "**Managed By : @Aublic**"
+),
         reply_markup=InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("👑𝖮𝖶𝖭𝖤𝖱", url="https://t.me/Aublic")
