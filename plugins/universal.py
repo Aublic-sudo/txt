@@ -5,8 +5,10 @@ import cloudscraper
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 from base64 import b64decode
+import os
 
 async def universal_login(bot, m: Message, host: str, user: str = None, passwd: str = None, token: str = None):
+    host = host.replace("https://", "").replace("http://", "").strip("/")  # ✅ Fix for double https
     s = requests.Session()
     scraper = cloudscraper.create_scraper()
     
@@ -15,7 +17,6 @@ async def universal_login(bot, m: Message, host: str, user: str = None, passwd: 
         userid = user
         await m.reply_text("✅ **Token Login Successful!**")
     else:
-        # Old flow: login with id/pass
         login_url = f"https://{host}/post/userLogin"
         hdr = {
             "Auth-Key": "appxapi",
@@ -46,7 +47,6 @@ async def universal_login(bot, m: Message, host: str, user: str = None, passwd: 
         "Authorization": token
     }
 
-    # Rest of the code same as before
     try:
         cour_url = f"https://{host}/get/mycourse?userid={userid}"
         res1 = s.get(cour_url, headers=hdr1)
@@ -65,7 +65,7 @@ async def universal_login(bot, m: Message, host: str, user: str = None, passwd: 
 
     await m.reply_text("**Now send the Batch ID to Download**")
     input2: Message = await bot.listen(m.chat.id)
-    batch_id = input2.text
+    batch_id = input2.text.strip()
     await input2.delete(True)
 
     try:
@@ -80,7 +80,7 @@ async def universal_login(bot, m: Message, host: str, user: str = None, passwd: 
 
     await m.reply_text("**Enter the Subject Id Show in above Response**")
     input3: Message = await bot.listen(m.chat.id)
-    subject_id = input3.text
+    subject_id = input3.text.strip()
     await input3.delete(True)
 
     try:
@@ -89,7 +89,7 @@ async def universal_login(bot, m: Message, host: str, user: str = None, passwd: 
         b_data2 = res3.json()['data']
         vj = ""
         for data in b_data2:
-            tids = (data["topicid"])
+            tids = data["topicid"]
             idid = f"{tids}&"
             if len(f"{vj}{idid}") > 4096:
                 vj = ""
@@ -97,8 +97,8 @@ async def universal_login(bot, m: Message, host: str, user: str = None, passwd: 
         cool1 = ""
         BBB = '**TOPIC-ID    - TOPIC     - VIDEOS**'
         for data in b_data2:
-            t_name = (data["topic_name"])
-            tid = (data["topicid"])
+            t_name = data["topic_name"]
+            tid = data["topicid"]
             zz = len(tid)
             hh = f"```{tid}```     - **{t_name} - ({zz})**\n"
             if len(f'{cool1}{hh}') > 4096:
@@ -109,20 +109,20 @@ async def universal_login(bot, m: Message, host: str, user: str = None, passwd: 
         await m.reply_text(f"❌ Failed to fetch topics: {str(e)}")
         return
 
-    editable = await m.reply_text(f"Now send the **Topic IDs** to Download\n\nSend like this **1&2&3&4** or copy/edit **below ids** for full batch:\n\n```{vj}```")
+    editable = await m.reply_text(f"Now send the **Topic IDs** to Download\n\nSend like this **1&2&3** or copy/edit **below ids**:\n\n```{vj}```")
     input4: Message = await bot.listen(m.chat.id)
-    topic_ids = input4.text
+    topic_ids = input4.text.strip()
     await input4.delete(True)
 
-    await m.reply_text("**Now send the Resolution**")
+    await m.reply_text("**Now send the Resolution (e.g., 360, 480, 720)**")
     input5: Message = await bot.listen(m.chat.id)
-    resolution = input5.text
+    resolution = input5.text.strip()
     await input5.delete(True)
+
+    outtxt = f"AUBLIC_{batch_id}_links.txt"
 
     try:
         xv = topic_ids.split('&')
-        mm = f"{host.replace('.', '_')}_batch"
-        outtxt = f'{mm}.txt'
         for t in xv:
             if not t.strip():
                 continue
@@ -144,6 +144,8 @@ async def universal_login(bot, m: Message, host: str, user: str = None, passwd: 
                 with open(outtxt, 'a', encoding='utf-8') as f:
                     f.write(f"{tid}:{b}\n")
         await m.reply_document(outtxt)
+        os.remove(outtxt)  # Cleanup
     except Exception as e:
         await m.reply_text(f"❌ Error: {str(e)}")
-    await m.reply_text("Done ✅")
+
+    await m.reply_text("✅ **Done. TXT File Sent.**")
