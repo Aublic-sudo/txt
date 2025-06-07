@@ -39,8 +39,8 @@ async def handle_callback(bot, callback):
             await input1.delete()
         except Exception:
             return await bot.send_message(callback.from_user.id, "❌ Failed to read API URL input.")
-        from plugins.universal import account_login
-        await account_login(bot, callback.message, api_url)
+        from plugins.universal import universal_login
+        await universal_login(bot, callback.message, api_url)
 
     elif data == "find_appx":
         await callback.message.delete()
