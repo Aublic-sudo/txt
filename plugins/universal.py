@@ -12,11 +12,16 @@ async def universal_login(bot, m: Message, host: str, user: str = None, passwd: 
     s = requests.Session()
     scraper = cloudscraper.create_scraper()
 
-    # 🔒 Login or Token
+    # 🔐 Login with ID*Password if token not given
     if token and user:
         userid = user
         await m.reply_text("✅ **Token Login Successful!**")
     else:
+        editable = await m.reply_text("Send **ID*Password** (e.g., `id*pass`):")
+        input1: Message = await bot.listen(m.chat.id)
+        raw = input1.text.strip()
+        await input1.delete()
+        email, passwd = raw.split("*")
         login_url = f"https://{host}/post/userLogin"
         hdr = {
             "Auth-Key": "appxapi",
@@ -28,24 +33,17 @@ async def universal_login(bot, m: Message, host: str, user: str = None, passwd: 
             "Accept-Encoding": "gzip, deflate",
             "User-Agent": "okhttp/4.9.1"
         }
-        info = {"email": user, "password": passwd}
         try:
-            res = scraper.post(login_url, data=info, headers=hdr).content
+            res = scraper.post(login_url, data={"email": email, "password": passwd}, headers=hdr).content
             output = json.loads(res)
-
-            if not output.get("status") or "data" not in output or "userid" not in output["data"]:
-                msg = output.get("message", "Unknown login error")
-                await m.reply_text(f"❌ Login failed: {msg}")
-                return
-
             userid = output["data"]["userid"]
             token = output["data"]["token"]
-            await m.reply_text("✅ **Login Successful!**")
+            await editable.edit("✅ **Login Successful!**")
         except Exception as e:
-            await m.reply_text(f"❌ Login failed: {str(e)}")
+            await editable.edit(f"❌ Login failed: {e}")
             return
 
-    hdr1 = {
+    headers = {
         "Host": host,
         "Client-Service": "Appx",
         "Auth-Key": "appxapi",
@@ -53,108 +51,83 @@ async def universal_login(bot, m: Message, host: str, user: str = None, passwd: 
         "Authorization": token
     }
 
-    # 📦 Fetch Courses
+    # 🎓 Fetch course
     try:
-        res1 = s.get(f"https://{host}/get/mycourse?userid={userid}", headers=hdr1)
-        b_data = res1.json()['data']
-        cool = ""
-        FFF = "**BATCH-ID - BATCH NAME - INSTRUCTOR**"
+        res1 = s.get(f"https://{host}/get/mycourse?userid={userid}", headers=headers)
+        b_data = res1.json()["data"]
+        txt = ""
         for data in b_data:
-            aa = f" ```{data['id']}``` - **{data['course_name']}**\n\n"
-            if len(f'{cool}{aa}') > 4096:
-                cool = ""
-            cool += aa
-        await m.reply_text(f'**You have these batches :-**\n\n{FFF}\n\n{cool}')
+            txt += f"```{data['id']}``` - **{data['course_name']}**\n\n"
+        await m.reply_text(f"**You have these batches:**\n\n{txt}")
     except Exception as e:
-        await m.reply_text(f"❌ Failed to fetch batches: {str(e)}")
-        return
+        return await m.reply_text(f"❌ Failed to fetch courses: {e}")
 
-    await m.reply_text("**Now send the Batch ID to Download**")
-    input2: Message = await bot.listen(m.chat.id)
-    batch_id = input2.text.strip()
-    await input2.delete(True)
+    # 📘 Get Batch ID
+    editable = await m.reply_text("**Now send the Batch ID to Download**")
+    input2 = await bot.listen(m.chat.id)
+    courseid = input2.text.strip()
+    await input2.delete()
 
-    # 📚 Fetch Subjects
+    # 📙 Get Subject ID
     try:
-        subj_url = f"https://{host}/get/allsubjectfrmlivecourseclass?courseid={batch_id}"
-        html = scraper.get(subj_url, headers=hdr1).content
-        output0 = json.loads(html)
-        subjID = output0["data"]
-        await m.reply_text(str(subjID))
+        r = scraper.get(f"https://{host}/get/allsubjectfrmlivecourseclass?courseid={courseid}", headers=headers).content
+        subdata = json.loads(r)["data"]
+        await m.reply_text(str(subdata))
     except Exception as e:
-        await m.reply_text(f"❌ Failed to fetch subjects: {str(e)}")
-        return
+        return await m.reply_text(f"❌ Failed to fetch subject list: {e}")
 
-    await m.reply_text("**Enter the Subject Id Show in above Response**")
-    input3: Message = await bot.listen(m.chat.id)
-    subject_id = input3.text.strip()
-    await input3.delete(True)
+    editable = await m.reply_text("**Enter the Subject ID shown above**")
+    input3 = await bot.listen(m.chat.id)
+    subjectid = input3.text.strip()
+    await input3.delete()
 
-    # 📂 Fetch Topics
+    # 📂 Get Topic IDs
     try:
-        topic_url = f"https://{host}/get/alltopicfrmlivecourseclass?courseid={batch_id}&subjectid={subject_id}"
-        res3 = s.get(topic_url, headers=hdr1)
-        b_data2 = res3.json()['data']
-        vj = ""
-        for data in b_data2:
-            tids = data["topicid"]
-            idid = f"{tids}&"
-            if len(f"{vj}{idid}") > 4096:
-                vj = ""
-            vj += idid
-        cool1 = ""
-        BBB = '**TOPIC-ID    - TOPIC     - VIDEOS**'
-        for data in b_data2:
-            t_name = data["topic_name"]
+        r = s.get(f"https://{host}/get/alltopicfrmlivecourseclass?courseid={courseid}&subjectid={subjectid}", headers=headers)
+        topiclist = r.json()["data"]
+        topic_ids, topic_details = "", ""
+        for data in topiclist:
             tid = data["topicid"]
-            zz = len(tid)
-            hh = f"```{tid}``` - **{t_name} - ({zz})**\n"
-            if len(f'{cool1}{hh}') > 4096:
-                cool1 = ""
-            cool1 += hh
-        await m.reply_text(f'Batch details of **{t_name}** are:\n\n{BBB}\n\n{cool1}')
+            name = data["topic_name"]
+            topic_ids += f"{tid}&"
+            topic_details += f"```{tid}``` - **{name}**\n"
+        await m.reply_text(f"**Topic Details:**\n\n{topic_details}")
     except Exception as e:
-        await m.reply_text(f"❌ Failed to fetch topics: {str(e)}")
-        return
+        return await m.reply_text(f"❌ Failed to fetch topics: {e}")
 
-    editable = await m.reply_text(f"Now send the **Topic IDs** to Download\n\nSend like this **1&2&3** or copy/edit **below ids**:\n\n```{vj}```")
-    input4: Message = await bot.listen(m.chat.id)
-    topic_ids = input4.text.strip()
-    await input4.delete(True)
+    editable = await m.reply_text(f"Send Topic IDs (like `1&2&3`) or use below for full:\n\n```{topic_ids}```")
+    input4 = await bot.listen(m.chat.id)
+    raw_topics = input4.text.strip()
+    await input4.delete()
 
-    await m.reply_text("**Now send the Resolution (e.g., 360, 480, 720)**")
-    input5: Message = await bot.listen(m.chat.id)
+    editable = await m.reply_text("**Now send the Resolution (360, 480, etc.)**")
+    input5 = await bot.listen(m.chat.id)
     resolution = input5.text.strip()
-    await input5.delete(True)
+    await input5.delete()
 
-    outtxt = f"AUBLIC_{batch_id}_links.txt"
-
-    # 🎬 Fetch and Decrypt Videos
+    # 🎥 Fetch and Decrypt
+    outtxt = f"AUBLIC_{courseid}_{subjectid}.txt"
     try:
-        xv = topic_ids.split('&')
-        for t in xv:
-            if not t.strip():
-                continue
-            url = f"https://{host}/get/livecourseclassbycoursesubtopconceptapiv3?topicid={t}&start=-1&conceptid=1&courseid={batch_id}&subjectid={subject_id}"
-            res4 = s.get(url, headers=hdr1).json()
-            topicid = res4["data"]
-            for data in topicid:
-                b64 = data.get("download_link") or data.get("pdf_link")
-                tid = data["Title"]
-                key = "638udh3829162018".encode("utf8")
-                iv = "fedcba9876543210".encode("utf8")
-                ciphertext = bytearray.fromhex(b64decode(b64.encode()).hex())
+        for t in raw_topics.split("&"):
+            if not t.strip(): continue
+            url = f"https://{host}/get/livecourseclassbycoursesubtopconceptapiv3?topicid={t}&start=-1&conceptid=1&courseid={courseid}&subjectid={subjectid}"
+            res = s.get(url, headers=headers).json()
+            for data in res["data"]:
+                encrypted = data.get("download_link") or data.get("pdf_link")
+                title = data["Title"]
+                key = b"638udh3829162018"
+                iv = b"fedcba9876543210"
                 cipher = AES.new(key, AES.MODE_CBC, iv)
                 try:
-                    plaintext = unpad(cipher.decrypt(ciphertext), AES.block_size)
-                    b = plaintext.decode('utf-8')
+                    ciphertext = bytearray.fromhex(b64decode(encrypted.encode()).hex())
+                    decrypted = unpad(cipher.decrypt(ciphertext), AES.block_size).decode()
                 except Exception as e:
-                    b = f"Failed to decrypt: {e}"
-                with open(outtxt, 'a', encoding='utf-8') as f:
-                    f.write(f"{tid}:{b}\n")
+                    decrypted = f"❌ Failed to decrypt: {e}"
+                with open(outtxt, "a", encoding="utf-8") as f:
+                    f.write(f"{title}: {decrypted}\n")
         await m.reply_document(outtxt)
         os.remove(outtxt)
     except Exception as e:
-        await m.reply_text(f"❌ Error: {str(e)}")
+        await m.reply_text(f"❌ Error: {e}")
 
-    await m.reply_text("✅ **Done. TXT File Sent.**")
+    await m.reply_text("✅ **Done! File Sent.**")
