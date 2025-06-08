@@ -1,3 +1,4 @@
+
 #  MIT License
 #
 #  Copyright (c) 2019-present Dan <https://github.com/delivrance>
@@ -49,44 +50,60 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 from base64 import b64encode, b64decode
 
-@bot.on_message(filters.command(["rgvikramjeet"]))
+@bot.on_message(filters.command(["rgvikramjeet"]) & ~filters.edited)
 async def account_login(bot: Client, m: Message):
     s = requests.Session()
     global cancel
     cancel = False
     editable = await m.reply_text(
-        "Send **ID & Password** in this manner otherwise bot will not respond.\n\nSend like this:-  **ID*Password**")
-    rwa_url = "https://rgvikramjeetapi.classx.co.in/post/userLogin"
-    hdr = {"Auth-Key": "appxapi",
-           "User-Id": "-2",
-           "Authorization": "",
-           "User_app_category": "",
-           "Language": "en",
-           "Content-Type": "application/x-www-form-urlencoded",
-           "Content-Length": "233",
-           "Accept-Encoding": "gzip, deflate",
-           "User-Agent": "okhttp/4.9.1"
-          }
-    info = {"email": "", "password": ""}
-    #7355971781*73559717
+        "Send your **ID*Password** (like `12345*pass`) or just send your token directly."
+    )
     input1: Message = await bot.listen(editable.chat.id)
-    raw_text = input1.text
-    info["email"] = raw_text.split("*")[0]
-    info["password"] = raw_text.split("*")[1]
+    raw_text = input1.text.strip()
     await input1.delete(True)
-    scraper = cloudscraper.create_scraper()
-    res = scraper.post(rwa_url, data=info, headers=hdr).content
-    output = json.loads(res)
-    #print(output)
-    userid = output["data"]["userid"]
-    token = output["data"]["token"]
+
+    if "*" in raw_text:
+        # ID*Password login
+        email, passwd = raw_text.split("*", 1)
+        rwa_url = "https://rgvikramjeetapi.classx.co.in/post/userLogin"
+        hdr = {
+            "Auth-Key": "appxapi",
+            "User-Id": "-2",
+            "Authorization": "",
+            "User_app_category": "",
+            "Language": "en",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept-Encoding": "gzip, deflate",
+            "User-Agent": "okhttp/4.9.1"
+        }
+        info = {"email": email, "password": passwd}
+        scraper = cloudscraper.create_scraper()
+        res = scraper.post(rwa_url, data=info, headers=hdr).content
+        output = json.loads(res)
+        if not output.get("data") or not output["data"].get("userid") or not output["data"].get("token"):
+            await editable.edit("❌ Login failed. Wrong credentials.")
+            return
+        userid = output["data"]["userid"]
+        token = output["data"]["token"]
+        await editable.edit("**Login Successful!**")
+    else:
+        # Token only
+        token = raw_text
+        editable2 = await m.reply_text("Send your **UserID** (numeric):")
+        input2: Message = await bot.listen(editable2.chat.id)
+        userid = input2.text.strip()
+        await input2.delete(True)
+        await editable.edit("**Token & UserID received!**")
+
+    # ab aage ka pura code same, userid & token dono set ho chuke hain
     hdr1 = {
         "Host": "rgvikramjeetapi.classx.co.in",
         "Client-Service": "Appx",
         "Auth-Key": "appxapi",
         "User-Id": userid,
         "Authorization": token
-        }
+    }
+    # ...aapka pura baaki code yahan se continue rahega...
     #print(userid)
     #print(token)
     await editable.edit("**login Successful**")
