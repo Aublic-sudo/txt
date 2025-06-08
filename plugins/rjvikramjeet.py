@@ -50,11 +50,9 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 from base64 import b64encode, b64decode
 
-@bot.on_message(filters.command(["rgvikramjeet"]))
+@bot.on_message(filters.command(["rgvikramjeet"]) & ~filters.edited)
 async def account_login(bot: Client, m: Message):
     s = requests.Session()
-    global cancel
-    cancel = False
     editable = await m.reply_text(
         "Send your **ID*Password** (like `12345*pass`) or just send your token directly."
     )
@@ -62,9 +60,16 @@ async def account_login(bot: Client, m: Message):
     raw_text = input1.text.strip()
     await input1.delete(True)
 
+    userid = None
+    token = None
+
     if "*" in raw_text:
         # ID*Password login
-        email, passwd = raw_text.split("*", 1)
+        try:
+            email, passwd = raw_text.split("*", 1)
+        except Exception:
+            await editable.edit("❌ Invalid format. Use `ID*Password`.")
+            return
         rwa_url = "https://rgvikramjeetapi.classx.co.in/post/userLogin"
         hdr = {
             "Auth-Key": "appxapi",
@@ -86,14 +91,20 @@ async def account_login(bot: Client, m: Message):
         userid = output["data"]["userid"]
         token = output["data"]["token"]
         await editable.edit("**Login Successful!**")
-    else:
+    elif raw_text:
         # Token only
         token = raw_text
         editable2 = await m.reply_text("Send your **UserID** (numeric):")
         input2: Message = await bot.listen(editable2.chat.id)
         userid = input2.text.strip()
         await input2.delete(True)
+        if not userid or not token:
+            await editable.edit("❌ UserID or Token missing.")
+            return
         await editable.edit("**Token & UserID received!**")
+    else:
+        await editable.edit("❌ Please send either ID*Password or Token.")
+        return
 
     # ab aage ka pura code same, userid & token dono set ho chuke hain
     hdr1 = {
