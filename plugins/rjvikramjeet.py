@@ -50,7 +50,7 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 from base64 import b64encode, b64decode
 
-@bot.on_message(filters.command(["rgvikramjeet"]) & ~filters.edited)
+@bot.on_message(filters.command(["rgvikramjeet"]))
 async def account_login(bot: Client, m: Message):
     s = requests.Session()
     global cancel
