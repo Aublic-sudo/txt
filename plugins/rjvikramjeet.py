@@ -50,7 +50,7 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 from base64 import b64encode, b64decode
 
-@bot.on_message(filters.command(["rgvikramjeet"]))
+@bot.on_message(filters.command(["rgvikramjeet"]) & ~filters.edited)
 async def account_login(bot: Client, m: Message):
     s = requests.Session()
     global cancel
@@ -111,7 +111,11 @@ async def account_login(bot: Client, m: Message):
     cour_url = "https://rgvikramjeetapi.classx.co.in/get/mycourse?userid="
 
     res1 = s.get("https://rgvikramjeetapi.classx.co.in/get/mycourse?userid="+userid, headers=hdr1)
-    b_data = res1.json()['data']
+    try:
+        b_data = res1.json()['data']
+    except Exception as e:
+        await m.reply_text(f"❌ API Error!\nStatus: {res1.status_code}\nText: {res1.text[:400]}")
+        return
     cool = ""
     for data in b_data:
         t_name =data['course_name']
@@ -251,3 +255,4 @@ async def account_login(bot: Client, m: Message):
     except Exception as e:
         await m.reply_text(str(e))
     await m.reply_text("Done")
+
